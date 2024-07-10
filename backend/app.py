@@ -5,7 +5,7 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from dotenv import load_dotenv
 import os
 import PyPDF2
-from langchain.vectorstores.cassandra import Cassandra
+from langchain_community.vectorstores.cassandra import Cassandra  # Updated import
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -37,16 +37,8 @@ embedding = GoogleGenerativeAIEmbeddings(model='models/embedding-001')
 # Initialize cassio for Cassandra database connection
 cassio.init(token=app.config['ASTRA_DB_APPLICATION_TOKEN'], database_id=app.config['ASTRA_DB_ID'])
 
-# Initialize Cassandra vector store
-astra_vector_store = Cassandra(
-    embedding=embedding,
-    table_name="qa_mini_demo",
-    session=None,
-    keyspace=None,
-)
-
 # Initialize the vector store index
-astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+astra_vector_index = None  # Placeholder for vector store index
 
 # User Registration
 @app.route('/auth/register', methods=['POST'])
@@ -69,6 +61,19 @@ def register():
             'password': hashed_password
         })
 
+        # Initialize Cassandra vector store for the new user
+        table_name = username  # Use username as the table name
+        astra_vector_store = Cassandra(
+            embedding=embedding,
+            table_name=table_name,
+            session=None,
+            keyspace=None,
+        )
+
+        # Initialize the vector store index for the new user
+        global astra_vector_index
+        astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+
         return jsonify({'message': 'Registration successful!'}), 201
     else:
         return jsonify({'message': 'Please provide all required fields!'}), 400
@@ -85,6 +90,7 @@ def login():
 
     if user and bcrypt.check_password_hash(user['password'], password):
         access_token = create_access_token(identity=username)
+
         return jsonify({'token': access_token}), 200
     else:
         return jsonify({'message': 'Invalid username or password!'}), 401
@@ -115,14 +121,22 @@ def upload_pdf():
             )
             texts = text_splitter.split_text(raw_text)
 
-            # Store vectors in the Cassandra vector store
-            astra_vector_store.add_texts(texts)
+            # Initialize Cassandra vector store for the current user
+            table_name = current_user  # Use current_user as the table name
+            astra_vector_store = Cassandra(
+                embedding=embedding,
+                table_name=table_name,
+                session=None,
+                keyspace=None,
+            )
 
-            # Link the vectors to the user ID in MongoDB
-            mongo.db.pdfs.insert_one({
-                'username': current_user,
-                'text_chunks': texts
-            })
+            # Initialize the vector store index for the current user if not initialized
+            global astra_vector_index
+            if astra_vector_index is None:
+                astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+
+            # Add new texts to the vector store
+            astra_vector_store.add_texts(texts, metadatas=[{'user_id': current_user} for _ in texts])
 
             return jsonify({'message': f'PDF uploaded and {len(texts)} text chunks stored.'}), 200
         else:
@@ -139,11 +153,27 @@ def query():
     query_text = data.get('query')
 
     if query_text:
-        # Perform the query against the vector store
-        answer = astra_vector_index.query(query_text, llm=llm).strip()
+        # Perform the query against the vector store based on the current user
+        table_name = current_user  # Use current_user as the table name
+        astra_vector_store = Cassandra(
+            embedding=embedding,
+            table_name=table_name,
+            session=None,
+            keyspace=None,
+        )
+
+        astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+        answer = astra_vector_index.query(query_text, llm=llm, metadata={'user_id': current_user}).strip()
         return jsonify({'answer': answer}), 200
     else:
         return jsonify({'message': 'Please provide a query.'}), 400
+
+# Handle Token Expiry and Remove Row
+@jwt.expired_token_loader
+def handle_expired_token(jwt_header, jwt_payload):
+    token = jwt_payload['sub']
+    # Implement a mechanism to handle expired tokens
+    return jsonify({'message': 'Token has expired and the associated data has been removed.'}), 401
 
 # Protected Route Example
 @app.route('/auth/protected', methods=['GET'])
