@@ -3,3 +3,11 @@ Flask-PyMongo
 Flask-Bcrypt
 python-dotenv
 Flask-JWT-Extended
+PyPDF2
+cassio
+datasets
+tiktoken
+google
+langchain==0.2.2
+langchain-google-genai
+langchain_community
