@@ -4,7 +4,7 @@
 
 ## Live Preview
 
-You can interact with the [PDFQueryBot Frontend](https://your-streamlit-live-preview-url) to see the application in action.
+You can interact with the [PDFQueryBot Frontend](https://prabhanshu76-spectre-bot-frontendapp-nwxjp8.streamlit.app/) to see the application in action.
 
 
 ## Overview
@@ -23,10 +23,10 @@ PDFQueryBot provides a platform where users can upload PDF files, ask questions 
 
 ## Technologies Used
 
-- **[Google Gemini LLM](https://www.google.com/ai/gemini/)**: For natural language understanding and generating responses.
-- **[Astradb](https://www.astra.datastax.com/)**: NoSQL database service for **storing PDF content vectors** and managing query results.
+- **[Google Gemini LLM](https://ai.google.dev/)**: For natural language understanding and generating responses.
+- **[Astradb](https://www.datastax.com/products/datastax-astra)**: NoSQL database service for **storing PDF content vectors** and managing query results.
 - **[MongoDB](https://www.mongodb.com/)**: NoSQL database for **user data management**.
-- **[Flask](https://flask.palletsprojects.com/en/2.3.x/)**: Web framework for building the application.
+- **[Flask](https://flask.palletsprojects.com/en/3.0.x/)**: Web framework for building the application.
 - **[Gunicorn](https://gunicorn.org/)**: WSGI HTTP Server for running the Flask app in production.
 - **[Docker](https://www.docker.com/)**: Containerization platform for deploying the application.
 
@@ -40,12 +40,11 @@ To get started with **PDF Query Bot**, you need to set up the backend and connec
 ### Clone the Repository
 
 ```bash
-[git clone https://github.com/yourusername/PDFQueryBot.git](https://github.com/Prabhanshu76/PDF-Query-Bot.git)
+git clone https://github.com/Prabhanshu76/PDF-Query-Bot.git
 cd PDF-Query-Bot
-### Set Up Environment Variables
 ```
 
-Create a `.env` file in the root directory with the following content:
+Create a `.env` file in the **backend** directory with the following content:
 
 ```plaintext
 SECRET_KEY=your_secret_key
@@ -59,38 +58,30 @@ GOOGLE_API_KEY=your_google_api_key
 
 To run the **PDFQueryBot** backend locally, follow these steps:
 
-### 1. Build the Docker Image
+### 1. Use the following command in the root directory to build and run the Docker containers as defined in your Docker Compose file:
 
-Build the Docker image using the following command:
-
-```bash
-docker build -t pdfquerybot-backend .
-```
-### 2. Run the Docker Container
-
-Run the Docker container with the following command:
 
 ```bash
-docker run -p 5000:5000 --env-file .env pdfquerybot-backend
+docker-compose up --build
 ```
 
-### 3. Access the APIs
+### 2. Access the APIs
 
 Once the container is running, you can access the backend APIs at the following endpoints:
 
-- **Registration**: `POST http://localhost:5000/auth/register`  
+- **Registration**: `POST http://127.0.0.1:5001/auth/register`  
   Register a new user. **No authentication required.**
 
-- **Login**: `POST http://localhost:5000/auth/login`  
+- **Login**: `POST http://127.0.0.1:5001/auth/login`  
   Log in an existing user and obtain a JWT token. **No authentication required.**
 
-- **Upload PDF**: `POST http://localhost:5000/pdf/upload`  
+- **Upload PDF**: `POST http://127.0.0.1:5001/pdf/upload`  
   Upload a PDF file and store the extracted text as vectors. **Requires authentication** (JWT token in the Authorization header).
 
-- **Query Processing**: `POST http://localhost:5000/pdf/query`  
+- **Query Processing**: `POST http://127.0.0.1:5001/pdf/query`  
   Submit a query against the uploaded PDF content and receive a response. **Requires authentication** (JWT token in the Authorization header).
 
-- **Sanity Check**: `GET http://localhost:5000/`  
+- **Sanity Check**: `GET http://127.0.0.1:5001/`  
   A simple endpoint to check if the application is up and running. **No authentication required.**
 
 ## Sample API Calls and Responses
@@ -99,12 +90,12 @@ Below are some example API calls along with the expected responses for each endp
 
 ### 1. User Registration
 
-**Endpoint:** `POST http://localhost:5000/auth/register`
+**Endpoint:** `POST http://127.0.0.1:5001/auth/register`
 
 **Request:**
 
 ```bash
-curl -X POST "http://localhost:5000/auth/register" \
+curl -X POST "http://127.0.0.1:5001/auth/register" \
 -H "Content-Type: application/json" \
 -d '{
   "username": "exampleUser",
@@ -127,12 +118,12 @@ curl -X POST "http://localhost:5000/auth/register" \
 
 ### 2. User Login
 
-**Endpoint:** `POST http://localhost:5000/auth/login`
+**Endpoint:** `POST http://127.0.0.1:5001/auth/login`
 
 **Request:**
 
 ```bash
-curl -X POST "http://localhost:5000/auth/login" \
+curl -X POST "http://127.0.0.1:5001/auth/login" \
 -H "Content-Type: application/json" \
 -d '{
   "username": "exampleUser",
@@ -155,12 +146,12 @@ curl -X POST "http://localhost:5000/auth/login" \
 
 ### 3. Upload PDF
 
-**Endpoint:** `POST http://localhost:5000/pdf/upload`
+**Endpoint:** `POST http://127.0.0.1:5001/pdf/upload`
 
 **Request:**
 
 ```bash
-curl -X POST "http://localhost:5000/pdf/upload" \
+curl -X POST "http://127.0.0.1:5001/pdf/upload" \
 -H "Authorization: Bearer your-jwt-token" \
 -F "pdf=@path/to/your/pdf-file.pdf"
 
@@ -181,12 +172,12 @@ curl -X POST "http://localhost:5000/pdf/upload" \
 
 ### 4. Query Processing
 
-**Endpoint:** `POST http://localhost:5000/auth/register`
+**Endpoint:** `POST http://127.0.0.1:5001/auth/register`
 
 **Request:**
 
 ```bash
-curl -X POST "http://localhost:5000/pdf/query" \
+curl -X POST "http://127.0.0.1:5001/pdf/query" \
 -H "Authorization: Bearer your-jwt-token" \
 -H "Content-Type: application/json" \
 -d '{
@@ -209,7 +200,7 @@ curl -X POST "http://localhost:5000/pdf/query" \
 
 ### 5. Sanity Check
 
-**Endpoint:** `POST http://localhost:5000/`
+**Endpoint:** `POST http://127.0.0.1:5001/`
 
 #### API Response 
 
@@ -226,7 +217,7 @@ curl -X POST "http://localhost:5000/pdf/query" \
 
 ## References
 
-- **[Google Gemini LLM](https://www.google.com/ai/gemini/)**: The AI model used for natural language understanding and generating responses.
+- **[LangChain GEN AI Tutorial](https://www.youtube.com/watch?v=x0AnCE9SE4A&ab_channel=freeCodeCamp.org)**: Tutorial on developing GEN AI applications using LangChain.
 
 
 
