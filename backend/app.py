@@ -37,8 +37,8 @@ embedding = GoogleGenerativeAIEmbeddings(model='models/embedding-001')
 # Initialize cassio for Cassandra database connection
 cassio.init(token=app.config['ASTRA_DB_APPLICATION_TOKEN'], database_id=app.config['ASTRA_DB_ID'])
 
-# Initialize the vector store index
-astra_vector_index = None  # Placeholder for vector store index
+# Placeholder for vector store index, this will be set up per user
+astra_vector_index = {}
 
 # User Registration
 @app.route('/auth/register', methods=['POST'])
@@ -71,8 +71,7 @@ def register():
         )
 
         # Initialize the vector store index for the new user
-        global astra_vector_index
-        astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+        astra_vector_index[username] = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
 
         return jsonify({'message': 'Registration successful!'}), 201
     else:
@@ -121,19 +120,18 @@ def upload_pdf():
             )
             texts = text_splitter.split_text(raw_text)
 
-            # Initialize Cassandra vector store for the current user
-            table_name = current_user  # Use current_user as the table name
-            astra_vector_store = Cassandra(
-                embedding=embedding,
-                table_name=table_name,
-                session=None,
-                keyspace=None,
-            )
-
-            # Initialize the vector store index for the current user if not initialized
-            global astra_vector_index
-            if astra_vector_index is None:
-                astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+            # Initialize Cassandra vector store for the current user if not already initialized
+            if current_user not in astra_vector_index:
+                table_name = current_user  # Use current_user as the table name
+                astra_vector_store = Cassandra(
+                    embedding=embedding,
+                    table_name=table_name,
+                    session=None,
+                    keyspace=None,
+                )
+                astra_vector_index[current_user] = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+            else:
+                astra_vector_store = astra_vector_index[current_user].vectorstore
 
             # Add new texts to the vector store
             astra_vector_store.add_texts(texts, metadatas=[{'user_id': current_user} for _ in texts])
@@ -153,20 +151,67 @@ def query():
     query_text = data.get('query')
 
     if query_text:
+        # Ensure the vector store index is initialized for the current user
+        if current_user not in astra_vector_index:
+            table_name = current_user  # Use current_user as the table name
+            astra_vector_store = Cassandra(
+                embedding=embedding,
+                table_name=table_name,
+                session=None,
+                keyspace=None,
+            )
+            astra_vector_index[current_user] = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
+        else:
+            astra_vector_store = astra_vector_index[current_user].vectorstore
+
         # Perform the query against the vector store based on the current user
-        table_name = current_user  # Use current_user as the table name
+        answer = astra_vector_index[current_user].query(query_text, llm=llm, metadata={'user_id': current_user}).strip()
+        return jsonify({'answer': answer}), 200
+    else:
+        return jsonify({'message': 'Please provide a query.'}), 400
+
+
+def cleanup_user_data(username):
+    """
+    Helper function to clean up user's AstraDB data
+    """
+    try:
+        # Initialize vector store for the user
+        table_name = username
         astra_vector_store = Cassandra(
             embedding=embedding,
             table_name=table_name,
             session=None,
             keyspace=None,
         )
+        
+        # Delete all vectors for the user
+        astra_vector_store.delete_collection()
+        return True
+    except Exception as e:
+        print(f"Error cleaning up user data: {str(e)}")
+        return False
 
-        astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
-        answer = astra_vector_index.query(query_text, llm=llm, metadata={'user_id': current_user}).strip()
-        return jsonify({'answer': answer}), 200
+# User Logout
+@app.route('/auth/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    current_user = get_jwt_identity()
+    
+    # Clean up user's AstraDB data
+    cleanup_success = cleanup_user_data(current_user)
+    
+    if cleanup_success:
+        return jsonify({
+            'message': 'Logout successful. All associated data has been cleaned up.',
+            'status': 'success'
+        }), 200
     else:
-        return jsonify({'message': 'Please provide a query.'}), 400
+        return jsonify({
+            'message': 'Logout successful, but there was an error cleaning up data.',
+            'status': 'partial_success'
+        }), 207
+
 
 # Handle Token Expiry and Remove Row
 @jwt.expired_token_loader
@@ -181,6 +226,7 @@ def handle_expired_token(jwt_header, jwt_payload):
 def protected():
     current_user = get_jwt_identity()
     return jsonify({'message': f'Hello, {current_user}!'})
+
 
 @app.route("/")
 def sanity_check():
